@@ -1,4 +1,4 @@
-import {range as sequence} from "d3-array";
+import {range as sequence, bisectRight} from "d3-array";
 import ordinal from "./ordinal";
 
 export default function band() {
@@ -79,6 +79,27 @@ export default function band() {
         .align(align);
   };
 
+  scale.invertExtent = function(r0, r1) {
+    var lo = +r0,
+        hi = arguments.length > 1 ? +r1 : lo,
+        reverse = range[1] < range[0],
+        values = reverse ? ordinalRange().reverse() : ordinalRange(),
+        n = values.length - 1, a, b, t;
+
+    // order range inputs, bail if outside of scale range
+    if (hi < lo) t = lo, lo = hi, hi = t;
+    if (hi < values[0] || lo > range[1-reverse]) return undefined;
+
+    // binary search to index into scale range
+    a = Math.max(0, bisectRight(values, lo) - 1);
+    b = lo===hi ? a : bisectRight(values, hi) - 1;
+
+    // increment index a if lo is within padding gap
+    if (lo - values[a] > bandwidth + 1e-10) ++a;
+
+    if (reverse) t = a, a = n - b, b = n - t; // map + swap
+    return (a > b) ? undefined : domain().slice(a, b+1);
+  };
   return rescale();
 }
 
@@ -95,6 +116,7 @@ function pointish(scale) {
 
   return scale;
 }
+
 
 export function point() {
   return pointish(band().paddingInner(1));
