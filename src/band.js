@@ -1,4 +1,4 @@
-import {range as sequence, bisectRight} from "d3-array";
+import {range as sequence} from "d3-array";
 import ordinal from "./ordinal";
 
 export default function band() {
@@ -14,7 +14,6 @@ export default function band() {
       align = 0.5;
 
   delete scale.unknown;
-
   function rescale() {
     var n = domain().length,
         reverse = range[1] < range[0],
@@ -84,22 +83,46 @@ export default function band() {
         hi = arguments.length > 1 ? +r1 : lo,
         reverse = range[1] < range[0],
         values = reverse ? ordinalRange().reverse() : ordinalRange(),
-        n = values.length - 1, a, b, t;
+        n = values.length - 1, a, b, t,
+        hiIndex;
+    values.push(values[n] + this.step());
+    // order range inputs, bail if outside of scale range
+    if (hi < lo) t = lo, lo = hi, hi = t;
+    if (hi < values[0] || lo > range[1-reverse]) return undefined;
+
+    // binary search to index into scale range
+    a = Math.max(0, getClosestIndexOf(values, lo));
+    hiIndex = getClosestIndexOf(values, hi);
+    b = lo===hi ? a : Math.max(a, hiIndex - 1);
+
+    // increment index a if lo is within padding gap
+    // if (lo - values[a] > bandwidth + 1e-10) ++a;
+
+    if (reverse) t = a, a = n - b, b = n - t; // map + swap
+    return (a > b) ? undefined : domain().slice(a, b+1);
+  };
+
+  scale.invert = function (r0, r1) {
+    var lo = +r0,
+        hi = arguments.length > 1 ? +r1 : lo,
+        reverse = range[1] < range[0],
+        values = reverse ? ordinalRange().reverse() : ordinalRange(),
+        n = values.length - 1,
+        a,
+        t;
 
     // order range inputs, bail if outside of scale range
     if (hi < lo) t = lo, lo = hi, hi = t;
     if (hi < values[0] || lo > range[1-reverse]) return undefined;
 
     // binary search to index into scale range
-    a = Math.max(0, bisectRight(values, lo) - 1);
-    b = lo===hi ? a : bisectRight(values, hi) - 1;
+    a = Math.max(0, getClosestIndexOf(values, lo, 'left'));
 
     // increment index a if lo is within padding gap
-    if (lo - values[a] > bandwidth + 1e-10) ++a;
+    // if (lo - values[a] > bandwidth + 1e-10) ++a;
 
-    if (reverse) t = a, a = n - b, b = n - t; // map + swap
-    return (a > b) ? undefined : domain().slice(a, b+1);
-  };
+    return domain()[reverse ? n - a : a];
+  }
   return rescale();
 }
 
@@ -117,7 +140,44 @@ function pointish(scale) {
   return scale;
 }
 
-
 export function point() {
   return pointish(band().paddingInner(1));
+}
+
+function getClosestIndexOf (arr, value, side) {
+  var low = 0,
+      arrLen = arr.length,
+      high = arrLen - 1,
+      highVal,
+      mid,
+      d1,
+      d2;
+
+  while (low < high) {
+      mid = Math.floor((low + high) / 2);
+      d1 = Math.abs(arr[mid] - value);
+      d2 = Math.abs(arr[mid + 1] - value);
+
+      if (d2 <= d1) {
+          low = mid + 1;
+      }
+      else {
+          high = mid;
+      }
+  }
+
+  if (!side) {
+      return high;
+  }
+
+  highVal = arr[high];
+  if (highVal === value) {
+      return high;
+  } else if (highVal > value) {
+      if (high === 0) { return high; }
+      return side === 'left'? high - 1 : high;
+  } else {
+      if (high === arr.length - 1) { return high; }
+      return side === 'left'? high : high + 1;
+  }
 }
